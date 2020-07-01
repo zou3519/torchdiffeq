@@ -21,8 +21,17 @@ parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--test_batch_size', type=int, default=1000)
 
 parser.add_argument('--save', type=str, default='./experiment1')
-parser.add_argument('--debug', action='store_true')
+# parser.add_argument('--debug', action='store_true')
 parser.add_argument('--gpu', type=int, default=0)
+parser.add_argument('--script', type=bool, default=False)
+
+# Extra arguments not in original repo
+parser.add_argument('--debug', type=str, default=None)
+torch.manual_seed(1337)
+np.random.seed(1337)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
 args = parser.parse_args()
 
 if args.adjoint:
@@ -316,7 +325,8 @@ if __name__ == '__main__':
     )
 
     data_gen = inf_generator(train_loader)
-    batches_per_epoch = len(train_loader)
+    # batches_per_epoch = len(train_loader)
+    batches_per_epoch = 64
 
     lr_fn = learning_rate_with_decay(
         args.batch_size, batch_denom=128, batches_per_epoch=batches_per_epoch, boundary_epochs=[60, 100, 140],
@@ -332,7 +342,6 @@ if __name__ == '__main__':
     end = time.time()
 
     for itr in range(args.nepochs * batches_per_epoch):
-
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr_fn(itr)
 
@@ -340,6 +349,9 @@ if __name__ == '__main__':
         x, y = data_gen.__next__()
         x = x.to(device)
         y = y.to(device)
+
+        if itr == 0:
+            model = torch.jit.trace(model, x)
         logits = model(x)
         loss = criterion(logits, y)
 
@@ -374,3 +386,5 @@ if __name__ == '__main__':
                         b_nfe_meter.avg, train_acc, val_acc
                     )
                 )
+            if args.debug is not None:
+                torch.save(logits, args.debug)
